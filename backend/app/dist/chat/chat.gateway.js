@@ -14,59 +14,77 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChatGateway = void 0;
 const websockets_1 = require("@nestjs/websockets");
-const websockets_2 = require("@nestjs/websockets");
 const socket_io_1 = require("socket.io");
+const chat_service_1 = require("./chat.service");
 let ChatGateway = class ChatGateway {
+    chatService;
     server;
+    constructor(chatService) {
+        this.chatService = chatService;
+    }
     handleConnection(client) {
-        console.log(`Cliente conectado: ${client.id}`);
+        console.log(`Client connected: ${client.id}`);
     }
     handleDisconnect(client) {
-        console.log(`Cliente desconectado: ${client.id}`);
+        console.log(`Client disconnected: ${client.id}`);
     }
-    handleJoinRoom(data, client) {
+    async handleJoinRoom(data, client) {
         const { room, username } = data;
         client.join(room);
-        console.log(`${username} entró a la sala ${room}`);
+        console.log(`📥 ${username} solicitó unirse a ${room}`);
+        const rawHistory = await this.chatService.getMessagesByRoom(room);
+        console.log(`💾 Mensajes encontrados en DB para ${room}:`, rawHistory.length);
+        const history = rawHistory.map(msg => ({
+            user: msg.user,
+            text: msg.text,
+            timestamp: msg.createdAt.toISOString(),
+        }));
+        client.emit('history', history);
         client.to(room).emit('message', {
             user: 'Sistema',
-            text: `${username} se ha unido al chat.`,
-            timestamp: new Date(),
+            text: `${username} entró a la sala.`,
+            timestamp: new Date().toISOString(),
         });
     }
-    handleMessage(data) {
-        this.server.to(data.room).emit('message', {
+    async handleMessage(data) {
+        console.log(`📝 Intentando guardar mensaje de ${data.user}`);
+        const savedMsg = await this.chatService.createMessage({
+            room: data.room,
             user: data.user,
             text: data.text,
-            timestamp: new Date(),
+        });
+        console.log('✅ Mensaje guardado ID:', savedMsg.id);
+        this.server.to(data.room).emit('message', {
+            user: savedMsg.user,
+            text: savedMsg.text,
+            timestamp: savedMsg.createdAt.toISOString(),
         });
     }
 };
 exports.ChatGateway = ChatGateway;
 __decorate([
-    (0, websockets_2.WebSocketServer)(),
+    (0, websockets_1.WebSocketServer)(),
     __metadata("design:type", socket_io_1.Server)
 ], ChatGateway.prototype, "server", void 0);
 __decorate([
     (0, websockets_1.SubscribeMessage)('joinRoom'),
-    __param(0, (0, websockets_2.MessageBody)()),
-    __param(1, (0, websockets_2.ConnectedSocket)()),
+    __param(0, (0, websockets_1.MessageBody)()),
+    __param(1, (0, websockets_1.ConnectedSocket)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object, socket_io_1.Socket]),
-    __metadata("design:returntype", void 0)
+    __metadata("design:returntype", Promise)
 ], ChatGateway.prototype, "handleJoinRoom", null);
 __decorate([
     (0, websockets_1.SubscribeMessage)('sendMessage'),
-    __param(0, (0, websockets_2.MessageBody)()),
+    __param(0, (0, websockets_1.MessageBody)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", void 0)
+    __metadata("design:returntype", Promise)
 ], ChatGateway.prototype, "handleMessage", null);
 exports.ChatGateway = ChatGateway = __decorate([
     (0, websockets_1.WebSocketGateway)({
-        cors: {
-            origin: '*',
-        },
-    })
+        cors: { origin: '*' },
+    }),
+    __metadata("design:paramtypes", [chat_service_1.ChatService])
 ], ChatGateway);
 //# sourceMappingURL=chat.gateway.js.map

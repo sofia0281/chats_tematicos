@@ -1,4 +1,5 @@
 services:
+  # --- SERVICIO BACKEND (Ya funciona) ---
   backend:
     build:
       context: ./backend/app
@@ -9,8 +10,27 @@ services:
     volumes:
       - ./backend/app:/app
       - /app/node_modules
-    # AGREGA ESTA LÍNEA EXACTA:
-    command: tail -f /dev/null 
+    # El comando tail es solo si necesitamos debuggear, pero ya funciona el normal.
+    # Lo dejamos normal para que arranque el servidor:
+    command: npm run start:dev
+    stdin_open: true
+    tty: true
+    networks:
+      - chat-network
+
+  # --- SERVICIO FRONTEND (Nuevo) ---
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: next_chat_frontend
+    ports:
+      - "3001:3000"  # Mapeamos 3001 (PC) -> 3000 (Contenedor)
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules # Truco para evitar error de permisos
+    environment:
+      - WATCHPACK_POLLING=true # Ayuda al hot-reload en Windows/WSL
     stdin_open: true
     tty: true
     networks:
