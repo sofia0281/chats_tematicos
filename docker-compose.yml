@@ -1,0 +1,21 @@
+services:
+  backend:
+    build:
+      context: ./backend/app
+      dockerfile: Dockerfile
+    container_name: nest_chat_backend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./backend/app:/app
+      - /app/node_modules
+    # AGREGA ESTA LÍNEA EXACTA:
+    command: tail -f /dev/null 
+    stdin_open: true
+    tty: true
+    networks:
+      - chat-network
+
+networks:
+  chat-network:
+    driver: bridge
