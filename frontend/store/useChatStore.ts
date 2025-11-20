@@ -5,7 +5,7 @@ import { io, Socket } from 'socket.io-client';
 interface Message {
   user: string;
   text: string;
-  timestamp?: string; // Hacemos opcional el timestamp por si acaso
+  timestamp?: string;
 }
 
 interface ChatState {
@@ -28,34 +28,47 @@ export const useChatStore = create<ChatState>((set, get) => ({
   currentRoom: '',
 
   connect: (username: string, room: string) => {
-    const socket = io('http://localhost:3000');
+    // Si ya existe una conexión activa, no creamos otra
+    const currentSocket = get().socket;
+    if (currentSocket?.connected) return;
 
+    // 1. CONFIGURACIÓN ROBUSTA PARA DOCKER
+    const socket = io('http://localhost:3000', {
+      transports: ['websocket'], // <--- ESTO ES CLAVE: Fuerza WebSocket directo sin polling
+      autoConnect: true,
+    });
+
+    // 2. PREPARAMOS LOS LISTENERS ANTES DE HACER NADA
+    
     socket.on('connect', () => {
-      console.log('🟢 Conectado al socket (Frontend)');
+      console.log('🟢 [FRONTEND] Socket Conectado ID:', socket.id);
       set({ isConnected: true, socket, currentUser: username, currentRoom: room });
       
-      // Unirse a la sala
+      // Apenas conecta, nos unimos
+      console.log(`📤 [FRONTEND] Solicitando unirse a sala: ${room}`);
       socket.emit('joinRoom', { room, username });
     });
 
-    // Escuchar el historial cuando entramos a la sala
     socket.on('history', (history: Message[]) => {
-      console.log('📜 ¡HISTORIAL RECIBIDO EN EL STORE!', history);
+      // ESTE ES EL LOG QUE BUSCAMOS
+      console.log('📜 [FRONTEND] ¡HISTORIAL RECIBIDO!', history); 
       set({ messages: history });
     });
-    // ------------------------------------------------
 
-    // Escuchar mensajes nuevos en tiempo real
     socket.on('message', (message: Message) => {
-      console.log('📩 Nuevo mensaje en tiempo real:', message);
+      console.log('📩 [FRONTEND] Nuevo mensaje:', message);
       set((state) => ({
         messages: [...state.messages, message],
       }));
     });
 
     socket.on('disconnect', () => {
-      console.log('🔴 Desconectado');
-      set({ isConnected: false, socket: null, messages: [] });
+      console.log('🔴 [FRONTEND] Socket Desconectado');
+      set({ isConnected: false });
+    });
+
+    socket.on('connect_error', (err) => {
+        console.error('⚠️ [FRONTEND] Error de conexión:', err.message);
     });
   },
 
@@ -72,7 +85,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   disconnect: () => {
     const { socket } = get();
-    if (socket) socket.disconnect();
+    if (socket) {
+        socket.disconnect();
+    }
     set({ socket: null, isConnected: false, messages: [] });
   },
 }));
